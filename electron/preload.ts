@@ -22,6 +22,47 @@ contextBridge.exposeInMainWorld('electronAPI', {
   googleRecentDocs: () => ipcRenderer.invoke('google-recent-docs'),
   googleValidateDocument: (documentId: string) => ipcRenderer.invoke('google-validate-document', documentId),
   
+  // Auto-updater
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  
+  // Generic invoke method for IPC calls
+  invoke: (channel: string, ...args: any[]) => {
+    const validChannels = ['check-for-updates'];
+    if (validChannels.includes(channel)) {
+      return ipcRenderer.invoke(channel, ...args);
+    }
+  },
+  
+  // Event listeners
+  on: (channel: string, func: (...args: any[]) => void) => {
+    const validChannels = [
+      'update-checking',
+      'update-available', 
+      'update-not-available',
+      'update-downloading',
+      'update-downloaded',
+      'update-error',
+      'update-download-progress'
+    ];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.on(channel, func);
+    }
+  },
+  removeAllListeners: (channel: string) => {
+    const validChannels = [
+      'update-checking',
+      'update-available', 
+      'update-not-available',
+      'update-downloading',
+      'update-downloaded',
+      'update-error',
+      'update-download-progress'
+    ];
+    if (validChannels.includes(channel)) {
+      ipcRenderer.removeAllListeners(channel);
+    }
+  },
+  
   // Platform detection
   platform: process.platform,
 }); 

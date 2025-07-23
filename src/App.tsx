@@ -4,6 +4,7 @@ import { X, Minus, Save, Cloud, CloudOff, Settings, Check, AlertCircle } from 'l
 import { cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { RichEditor, RichEditorRef } from '@/components/RichEditor';
+import { UpdateIndicator } from '@/components/UpdateIndicator';
 
 interface NoteState {
   content: string;
@@ -446,6 +447,7 @@ function App() {
           <div className="text-xs text-neutral-400 dark:text-neutral-500 text-center">
             {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'}+S save • {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'}+Shift+↵ section • {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'}+Shift+I console
           </div>
+          <UpdateIndicator />
         </div>
       </div>
 

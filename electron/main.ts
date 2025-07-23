@@ -2,6 +2,7 @@ import { app, BrowserWindow, globalShortcut, screen, ipcMain } from 'electron';
 import * as path from 'path';
 import Store from 'electron-store';
 import { GoogleSyncManager } from './googleSync';
+import { AutoUpdaterManager } from './autoUpdater';
 
 // Disable security warnings in development
 const isDev = process.argv.includes('--dev');
@@ -25,6 +26,7 @@ class GlobalNoteTaker {
   private mainWindow: BrowserWindow | null = null;
   private isQuitting = false;
   private syncManager: GoogleSyncManager | null = null;
+  private autoUpdaterManager: AutoUpdaterManager | null = null;
 
   constructor() {
     this.createWindow = this.createWindow.bind(this);
@@ -108,6 +110,11 @@ class GlobalNoteTaker {
       
       // Initialize sync manager
       this.syncManager = new GoogleSyncManager(this.mainWindow);
+      
+      // Initialize auto-updater
+      if (this.mainWindow) {
+        this.autoUpdaterManager = new AutoUpdaterManager(this.mainWindow);
+      }
     });
 
     // Auto-hide when window loses focus (except when dev tools are open)
@@ -240,6 +247,13 @@ class GlobalNoteTaker {
         return await this.syncManager.validateDocument(documentId);
       }
       return { success: false, error: 'Sync manager not available' };
+    });
+
+    // Auto-updater handlers
+    ipcMain.handle('check-for-updates', () => {
+      if (this.autoUpdaterManager) {
+        this.autoUpdaterManager.manualCheckForUpdates();
+      }
     });
   }
 
