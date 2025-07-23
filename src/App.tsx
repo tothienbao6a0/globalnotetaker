@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { X, Minus, Save, Cloud, CloudOff, Settings } from 'lucide-react';
+import { X, Minus, Save, Cloud, CloudOff, Settings, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/SettingsDialog';
 
@@ -25,9 +25,12 @@ function App() {
   });
 
   const [showSettings, setShowSettings] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const lastKeyRef = useRef<string | null>(null);
+  const lastKeyTimeRef = useRef<number>(0);
 
   // Load saved note and sync status on mount
   useEffect(() => {
@@ -82,6 +85,45 @@ function App() {
     };
   }, []);
 
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = window.electronAPI.platform === 'darwin';
+      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+      // Cmd/Ctrl + S - Manual save
+      if (cmdOrCtrl && e.key === 's') {
+        e.preventDefault();
+        handleQuickSave();
+        return;
+      }
+
+      // Cmd/Ctrl + Enter - Quick save
+      if (cmdOrCtrl && e.key === 'Enter') {
+        e.preventDefault();
+        handleQuickSave();
+        return;
+      }
+
+      // Cmd/Ctrl + , - Open settings
+      if (cmdOrCtrl && e.key === ',') {
+        e.preventDefault();
+        setShowSettings(true);
+        return;
+      }
+
+      // Escape - Close window
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleMinimize();
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [noteState.content]);
+
   // Auto-save functionality
   const saveNote = async (content: string) => {
     try {
@@ -117,6 +159,32 @@ function App() {
     }, 1000);
   };
 
+  // Handle double-enter in textarea
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter') {
+      const currentTime = Date.now();
+      
+      // Check if this is a double-enter (within 500ms)
+      if (lastKeyRef.current === 'Enter' && currentTime - lastKeyTimeRef.current < 500) {
+        e.preventDefault();
+        handleQuickSave();
+        showNotification('Quick saved with ↵↵');
+        // Reset to prevent triple-enter
+        lastKeyRef.current = null;
+        lastKeyTimeRef.current = 0;
+        return;
+      }
+      
+      // Record this keypress
+      lastKeyRef.current = 'Enter';
+      lastKeyTimeRef.current = currentTime;
+    } else {
+      // Reset if any other key is pressed
+      lastKeyRef.current = null;
+      lastKeyTimeRef.current = 0;
+    }
+  };
+
   // Manual save
   const handleManualSave = () => {
     if (saveTimeoutRef.current) {
@@ -132,6 +200,21 @@ function App() {
 
   const handleMinimize = () => {
     window.electronAPI.minimizeWindow();
+  };
+
+  // Show notification with auto-hide
+  const showNotification = (message: string) => {
+    setNotification(message);
+    setTimeout(() => setNotification(null), 2000);
+  };
+
+  // Quick save (immediate, bypasses debouncing)
+  const handleQuickSave = async () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    await saveNote(noteState.content);
+    showNotification('Saved!');
   };
 
   // Format last saved time
@@ -155,7 +238,7 @@ function App() {
   };
 
   return (
-    <div className="note-window h-full w-full bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl rounded-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-2xl overflow-hidden">
+    <div className="note-window relative h-full w-full bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl rounded-xl border border-neutral-200/50 dark:border-neutral-800/50 shadow-2xl overflow-hidden flex flex-col">
       {/* macOS-style Title bar with drag region */}
       <div 
         className="flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md border-b border-neutral-200/50 dark:border-neutral-800/50"
@@ -203,11 +286,12 @@ function App() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 p-4">
+      <div className="flex-1 p-4 min-h-0">
         <Textarea
           ref={textareaRef}
           value={noteState.content}
           onChange={handleContentChange}
+          onKeyDown={handleTextareaKeyDown}
           placeholder="Start typing your note..."
           className={cn(
             "w-full h-full resize-none border-none bg-transparent",
@@ -216,17 +300,30 @@ function App() {
             "custom-scrollbar"
           )}
           style={{ 
-            minHeight: '100%',
+            minHeight: '140px',
             boxShadow: 'none',
             fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif'
           }}
         />
       </div>
 
+      {/* Notification Toast */}
+      {notification && (
+        <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-2 rounded-md shadow-lg flex items-center gap-2 animate-in fade-in duration-200">
+          <Check className="w-4 h-4" />
+          <span className="text-sm font-medium">{notification}</span>
+        </div>
+      )}
+
       {/* Footer */}
       <div className="px-4 py-3 border-t border-neutral-200/50 dark:border-neutral-800/50 bg-neutral-50/80 dark:bg-neutral-800/50 backdrop-blur-sm">
-        <div className="text-xs text-neutral-500 dark:text-neutral-400 text-center font-medium">
-          {window.electronAPI.platform === 'darwin' ? '⌘+Shift+N' : 'Ctrl+Shift+N'} to toggle
+        <div className="flex flex-col items-center gap-1">
+          <div className="text-xs text-neutral-500 dark:text-neutral-400 text-center font-medium">
+            {window.electronAPI.platform === 'darwin' ? '⌘+Shift+N' : 'Ctrl+Shift+N'} to toggle
+          </div>
+          <div className="text-xs text-neutral-400 dark:text-neutral-500 text-center">
+            ↵↵ quick save • {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'}+S save • Esc close
+          </div>
         </div>
       </div>
 

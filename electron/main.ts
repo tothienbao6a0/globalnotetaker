@@ -32,14 +32,15 @@ class GlobalNoteTaker {
     // Create the browser window with minimal, floating design
     this.mainWindow = new BrowserWindow({
       width: 380,
-      height: 420,
+      height: 320,
       x: Math.round((width - 380) / 2),
-      y: Math.round((height - 420) / 3),
+      y: Math.round((height - 320) / 3),
       frame: true,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 16, y: 16 },
       transparent: false,
       backgroundColor: '#ffffff',
+      type: process.platform === 'darwin' ? 'panel' : undefined, // NSPanel on macOS for fullscreen overlay
       alwaysOnTop: true,
       skipTaskbar: true,
       resizable: true,
@@ -77,13 +78,6 @@ class GlobalNoteTaker {
       // Show without focus initially to not interrupt other apps
       this.mainWindow?.showInactive();
       
-      // Set window to appear over fullscreen apps (macOS)
-      if (process.platform === 'darwin') {
-        // Use the highest possible level to appear over fullscreen apps
-        // 'screen-saver' is only 101, but we need 1000+ for fullscreen
-        this.mainWindow?.setAlwaysOnTop(true, 'screen-saver', 1000);
-      }
-      
       // Initialize sync manager
       this.syncManager = new GoogleSyncManager(this.mainWindow);
     });
@@ -107,11 +101,6 @@ class GlobalNoteTaker {
     } else {
       // Show without focus to not interrupt fullscreen apps
       this.mainWindow.showInactive();
-      
-      // Ensure it appears over fullscreen apps but doesn't steal focus
-      if (process.platform === 'darwin') {
-        this.mainWindow.setAlwaysOnTop(true, 'screen-saver', 1000);
-      }
     }
   }
 
