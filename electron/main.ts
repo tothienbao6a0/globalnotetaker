@@ -32,9 +32,9 @@ class GlobalNoteTaker {
     // Create the browser window with minimal, floating design
     this.mainWindow = new BrowserWindow({
       width: 380,
-      height: 320,
+      height: 280,
       x: Math.round((width - 380) / 2),
-      y: Math.round((height - 320) / 3),
+      y: Math.round((height - 280) / 3),
       frame: true,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 16, y: 16 },

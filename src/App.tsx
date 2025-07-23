@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { X, Minus, Save, Cloud, CloudOff, Settings, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/SettingsDialog';
+import { RichEditor, RichEditorRef } from '@/components/RichEditor';
 
 interface NoteState {
   content: string;
@@ -27,7 +27,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<RichEditorRef>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const lastKeyRef = useRef<string | null>(null);
   const lastKeyTimeRef = useRef<number>(0);
@@ -61,13 +61,10 @@ function App() {
     loadAppState();
   }, []);
 
-  // Auto-focus textarea when app opens
+  // Auto-focus editor when app opens
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-      // Move cursor to end
-      const length = textareaRef.current.value.length;
-      textareaRef.current.setSelectionRange(length, length);
+    if (editorRef.current) {
+      editorRef.current.focus();
     }
   }, []);
 
@@ -144,8 +141,7 @@ function App() {
   };
 
   // Handle content changes with debounced auto-save
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newContent = e.target.value;
+  const handleContentChange = (newContent: string) => {
     setNoteState(prev => ({ ...prev, content: newContent }));
 
     // Clear existing timeout
@@ -159,8 +155,8 @@ function App() {
     }, 1000);
   };
 
-  // Handle double-enter in textarea
-  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  // Handle double-enter in editor
+  const handleTextareaKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
       const currentTime = Date.now();
       
@@ -286,24 +282,14 @@ function App() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 p-4 min-h-0">
-        <Textarea
-          ref={textareaRef}
-          value={noteState.content}
+      <div className="flex-1 min-h-0">
+        <RichEditor
+          ref={editorRef}
+          content={noteState.content}
           onChange={handleContentChange}
           onKeyDown={handleTextareaKeyDown}
           placeholder="Start typing your note..."
-          className={cn(
-            "w-full h-full resize-none border-none bg-transparent",
-            "focus-visible:ring-0 focus-visible:ring-offset-0",
-            "text-base leading-relaxed placeholder:text-neutral-400 dark:placeholder:text-neutral-600",
-            "custom-scrollbar"
-          )}
-          style={{ 
-            minHeight: '140px',
-            boxShadow: 'none',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif'
-          }}
+          className="w-full h-full"
         />
       </div>
 
