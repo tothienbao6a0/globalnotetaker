@@ -15,9 +15,46 @@ import * as dotenv from 'dotenv';
 const envResult = dotenv.config();
 if (envResult.error) {
   console.error('Error loading .env file:', envResult.error);
+  console.log('Trying to load .env from app root...');
+  // Try loading from app root in production
+  const path = require('path');
+  const appPath = app.isPackaged ? path.dirname(process.execPath) : process.cwd();
+  dotenv.config({ path: path.join(appPath, '.env') });
 } else {
   console.log('Environment variables loaded successfully');
 }
+
+// Google OAuth setup for public repository
+// NOTE: Since this is a public repo, we can't securely store client secrets
+// Users will need to set up their own Google OAuth app or use environment variables
+
+// Default public client ID (you can keep this public)
+const DEFAULT_CLIENT_ID = '1089407822793-bdeta8pdutnguh40qep0j5ghg77bcpbt.apps.googleusercontent.com';
+
+// Load from environment variables (both dev and production)
+process.env.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 
+                               process.env.VITE_GOOGLE_CLIENT_ID || 
+                               DEFAULT_CLIENT_ID;
+
+process.env.GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 
+                                   process.env.VITE_GOOGLE_CLIENT_SECRET;
+
+// Validate that we have the required credentials
+if (!process.env.GOOGLE_CLIENT_SECRET) {
+  console.error('🚨 GOOGLE_CLIENT_SECRET is required!');
+  console.error('📋 For security reasons (public repo), you need to:');
+  console.error('   1. Create your own Google OAuth app at https://console.cloud.google.com');
+  console.error('   2. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables');
+  console.error('   3. Or add them to your .env file (keep .env private!)');
+  console.error('');
+  console.error('🔗 Setup guide: https://developers.google.com/identity/protocols/oauth2');
+}
+
+// Debug Google credentials
+console.log('DEBUG: App is packaged:', app.isPackaged);
+console.log('DEBUG: CLIENT_ID exists:', !!process.env.GOOGLE_CLIENT_ID);
+console.log('DEBUG: CLIENT_SECRET exists:', !!process.env.GOOGLE_CLIENT_SECRET);
+console.log('✅ Google OAuth credentials loaded for', app.isPackaged ? 'PRODUCTION' : 'DEVELOPMENT');
 
 // Initialize electron store for persistent settings
 const store = new Store();
@@ -69,7 +106,9 @@ class GlobalNoteTaker {
     // Load the app  
     // Note: isDev already defined at top of file
     
-    // Set up CSP - only for production builds
+    // Temporarily disable CSP for debugging
+    // TODO: Re-enable CSP after fixing white screen issue
+    /*
     if (!isDev) {
       const csp = "default-src 'self'; " +
                   "script-src 'self' 'unsafe-inline'; " +
@@ -87,12 +126,30 @@ class GlobalNoteTaker {
         });
       });
     }
+    */
     
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:3000');
       this.mainWindow.webContents.openDevTools();
     } else {
-      this.mainWindow.loadFile(path.join(__dirname, 'renderer/index.html'));
+      const htmlPath = path.join(__dirname, 'renderer/index.html');
+      console.log('Loading HTML from:', htmlPath);
+      
+              this.mainWindow.loadFile(htmlPath).catch((err) => {
+          console.error('Failed to load HTML file:', err);
+        });
+        
+        // Remove dev tools in production (uncomment next line for debugging)
+        // this.mainWindow.webContents.openDevTools();
+      
+      // Log any renderer errors
+      this.mainWindow.webContents.on('crashed', () => {
+        console.error('Renderer process crashed!');
+      });
+      
+      this.mainWindow.webContents.on('unresponsive', () => {
+        console.error('Renderer process became unresponsive!');
+      });
     }
 
     // Hide window instead of closing
