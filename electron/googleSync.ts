@@ -51,33 +51,58 @@ export class GoogleSyncManager {
     try {
       const authUrl = this.authService.getAuthUrl();
       
-      // Open auth URL in default browser
-      await shell.openExternal(authUrl);
-      
-      // Create a temporary window to handle the callback
+      // Create a window to handle OAuth flow directly
       const authWindow = new BrowserWindow({
         width: 500,
         height: 600,
         show: true,
+        modal: true,
+        parent: this.mainWindow || undefined,
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
+          webSecurity: true,
         },
       });
 
-      // Load a simple callback handler page
-      authWindow.loadURL('data:text/html,<h1>Authenticating...</h1><p>Please complete the authentication in your browser, then close this window.</p>');
+      // Load the OAuth URL directly in the window
+      authWindow.loadURL(authUrl);
 
       return new Promise((resolve) => {
         authWindow.on('closed', () => {
           resolve(false);
         });
 
-        // Handle URL changes (in case we can capture the callback)
-        authWindow.webContents.on('will-navigate', async (event, url) => {
-          if (url.includes('code=')) {
-            const urlParams = new URLSearchParams(url.split('?')[1]);
-            const code = urlParams.get('code');
+        // Handle URL changes to capture the callback
+        authWindow.webContents.on('will-navigate', async (event, navigationUrl) => {
+          if (navigationUrl.startsWith('http://localhost:3000/auth/callback') || navigationUrl.includes('code=')) {
+            const url = new URL(navigationUrl);
+            const code = url.searchParams.get('code');
+            
+            if (code) {
+              try {
+                const tokens = await this.authService.getTokens(code);
+                this.store.set('googleTokens', tokens);
+                this.docsService = new GoogleDocsService(this.authService);
+                authWindow.close();
+                resolve(true);
+              } catch (error) {
+                console.error('Token exchange failed:', error);
+                authWindow.close();
+                resolve(false);
+              }
+            } else {
+              authWindow.close();
+              resolve(false);
+            }
+          }
+        });
+
+        // Also handle page load events in case will-navigate doesn't catch it
+        authWindow.webContents.on('did-navigate', async (event, navigationUrl) => {
+          if (navigationUrl.startsWith('http://localhost:3000/auth/callback') || navigationUrl.includes('code=')) {
+            const url = new URL(navigationUrl);
+            const code = url.searchParams.get('code');
             
             if (code) {
               try {

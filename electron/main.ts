@@ -79,8 +79,9 @@ class GlobalNoteTaker {
       
       // Set window to appear over fullscreen apps (macOS)
       if (process.platform === 'darwin') {
-        // Use screen-saver level (1000) to appear over fullscreen apps
-        this.mainWindow?.setAlwaysOnTop(true, 'screen-saver');
+        // Use the highest possible level to appear over fullscreen apps
+        // 'screen-saver' is only 101, but we need 1000+ for fullscreen
+        this.mainWindow?.setAlwaysOnTop(true, 'screen-saver', 1000);
       }
       
       // Initialize sync manager
@@ -109,7 +110,7 @@ class GlobalNoteTaker {
       
       // Ensure it appears over fullscreen apps but doesn't steal focus
       if (process.platform === 'darwin') {
-        this.mainWindow.setAlwaysOnTop(true, 'screen-saver');
+        this.mainWindow.setAlwaysOnTop(true, 'screen-saver', 1000);
       }
     }
   }
