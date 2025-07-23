@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { X, Minus, Save, Cloud, CloudOff, Settings, Check } from 'lucide-react';
+import { X, Minus, Save, Cloud, CloudOff, Settings, Check, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { RichEditor, RichEditorRef } from '@/components/RichEditor';
@@ -25,12 +25,10 @@ function App() {
   });
 
   const [showSettings, setShowSettings] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
   const editorRef = useRef<RichEditorRef>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
-  const lastKeyRef = useRef<string | null>(null);
-  const lastKeyTimeRef = useRef<number>(0);
 
   // Load saved note and sync status on mount
   useEffect(() => {
@@ -88,8 +86,29 @@ function App() {
       const isMac = window.electronAPI.platform === 'darwin';
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
 
-      // Cmd/Ctrl + S - Manual save
-      if (cmdOrCtrl && e.key === 's') {
+      console.log('🔍 Key pressed:', e.key, 'meta:', e.metaKey, 'ctrl:', e.ctrlKey, 'shift:', e.shiftKey, 'cmdOrCtrl:', cmdOrCtrl);
+      
+      // Special debug for Shift+S combination
+      if (e.key === 'S' && e.shiftKey) {
+        console.log('🔍 SHIFT+S detected! cmdOrCtrl:', cmdOrCtrl, 'conditions check:', {
+          'cmdOrCtrl && e.shiftKey && e.key === S': cmdOrCtrl && e.shiftKey && e.key === 'S',
+          'cmdOrCtrl': cmdOrCtrl,
+          'e.shiftKey': e.shiftKey,
+          'e.key === S': e.key === 'S'
+        });
+      }
+
+      // Cmd/Ctrl + Shift + Enter - Save as section (CHECK THIS FIRST!)
+      if (cmdOrCtrl && e.shiftKey && e.key === 'Enter') {
+        console.log('🔍 Keyboard shortcut Cmd/Ctrl+Shift+Enter triggered!');
+        e.preventDefault();
+        handleSaveAsSection();
+        return;
+      }
+
+      // Cmd/Ctrl + S - Manual save (but NOT with shift)
+      if (cmdOrCtrl && !e.shiftKey && e.key === 's') {
+        console.log('🔍 Manual save shortcut triggered!');
         e.preventDefault();
         handleQuickSave();
         return;
@@ -97,6 +116,7 @@ function App() {
 
       // Cmd/Ctrl + Enter - Quick save
       if (cmdOrCtrl && e.key === 'Enter') {
+        console.log('🔍 Quick save shortcut triggered!');
         e.preventDefault();
         handleQuickSave();
         return;
@@ -104,6 +124,7 @@ function App() {
 
       // Cmd/Ctrl + , - Open settings
       if (cmdOrCtrl && e.key === ',') {
+        console.log('🔍 Settings shortcut triggered!');
         e.preventDefault();
         setShowSettings(true);
         return;
@@ -111,6 +132,7 @@ function App() {
 
       // Escape - Close window
       if (e.key === 'Escape') {
+        console.log('🔍 Escape key triggered!');
         e.preventDefault();
         handleMinimize();
         return;
@@ -142,6 +164,7 @@ function App() {
 
   // Handle content changes with debounced auto-save
   const handleContentChange = (newContent: string) => {
+    console.log('🔍 Content changed to:', newContent);
     setNoteState(prev => ({ ...prev, content: newContent }));
 
     // Clear existing timeout
@@ -155,30 +178,137 @@ function App() {
     }, 1000);
   };
 
-  // Handle double-enter in editor
-  const handleTextareaKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const currentTime = Date.now();
+  // Save current content as a new section and clear editor
+  const handleSaveAsSection = async () => {
+    const currentContent = noteState.content.trim();
+    console.log('🔍 handleSaveAsSection called with content:', currentContent);
+    
+    if (!currentContent) {
+      showNotification('Nothing to save!', 'error');
+      return;
+    }
+
+    try {
+      setNoteState(prev => ({ ...prev, isSaving: true }));
+
+      // Convert HTML content to plain text for Google Docs - SUPER ROBUST method
+      let plainText = currentContent;
       
-      // Check if this is a double-enter (within 500ms)
-      if (lastKeyRef.current === 'Enter' && currentTime - lastKeyTimeRef.current < 500) {
-        e.preventDefault();
-        handleQuickSave();
-        showNotification('Quick saved with ↵↵');
-        // Reset to prevent triple-enter
-        lastKeyRef.current = null;
-        lastKeyTimeRef.current = 0;
-        return;
+      console.log('🔍 Original HTML:', JSON.stringify(currentContent));
+      console.log('🔍 Contains HTML tags:', currentContent.includes('<'));
+      
+      // ALWAYS strip HTML tags - multiple methods
+      if (currentContent.includes('<')) {
+        console.log('🔍 Attempting DOM parsing...');
+        
+        // Method 1: DOM parsing
+        try {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = currentContent;
+          const domText = tempDiv.textContent || tempDiv.innerText || '';
+          console.log('🔍 DOM parsing result:', JSON.stringify(domText));
+          
+          if (domText && domText.trim()) {
+            plainText = domText.trim();
+          }
+        } catch (e) {
+          console.log('🔍 DOM parsing failed:', e);
+        }
+        
+        // Method 2: Regex stripping (always as backup)
+        const regexText = currentContent.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        console.log('🔍 Regex stripping result:', JSON.stringify(regexText));
+        
+        // Use the longer result (more likely to be correct)
+        if (regexText.length > plainText.length) {
+          plainText = regexText;
+        }
+        
+        // Method 3: DOMParser as final fallback
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(currentContent, 'text/html');
+          const parserText = doc.body.textContent || '';
+          console.log('🔍 DOMParser result:', JSON.stringify(parserText));
+          
+          if (parserText && parserText.trim() && parserText.length > plainText.length) {
+            plainText = parserText.trim();
+          }
+        } catch (e) {
+          console.log('🔍 DOMParser failed:', e);
+        }
       }
       
-      // Record this keypress
-      lastKeyRef.current = 'Enter';
-      lastKeyTimeRef.current = currentTime;
-    } else {
-      // Reset if any other key is pressed
-      lastKeyRef.current = null;
-      lastKeyTimeRef.current = 0;
+      // Final cleanup
+      plainText = plainText.replace(/\s+/g, ' ').trim();
+      
+      console.log('🔍 FINAL plain text result:', JSON.stringify(plainText));
+      console.log('🔍 Original length:', currentContent.length, 'Final length:', plainText.length);
+
+      // Create timestamp for section
+      const now = new Date();
+      const timestamp = now.toLocaleString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      const sectionTitle = `📝 ${timestamp}`;
+      const sectionContent = `${sectionTitle}\n\n${plainText}\n\n`;
+      
+      console.log('🔍 Final section content:', sectionContent);
+
+      // Save to Google Docs as a new section
+      const success = await window.electronAPI.saveNoteSection(sectionContent);
+      console.log('🔍 Save result:', success);
+      
+      if (success) {
+        console.log('🔍 Clearing editor...');
+        
+        // First clear the rich editor directly
+        if (editorRef.current) {
+          console.log('🔍 Clearing rich editor with setHTML...');
+          editorRef.current.setHTML('');
+          
+          // Give it a moment to update, then clear state
+          setTimeout(() => {
+            setNoteState(prev => ({ 
+              ...prev, 
+              content: '',
+              lastSaved: new Date().toISOString(),
+              isSaving: false
+            }));
+          }, 100);
+        } else {
+          console.log('🔍 editorRef.current is null!');
+          // Clear state immediately if no editor ref
+          setNoteState(prev => ({ 
+            ...prev, 
+            content: '',
+            lastSaved: new Date().toISOString(),
+            isSaving: false
+          }));
+        }
+
+        showNotification(`Section saved: ${timestamp}`);
+      } else {
+        showNotification('Failed to save section', 'error');
+        setNoteState(prev => ({ ...prev, isSaving: false }));
+      }
+    } catch (error) {
+      console.error('Error saving section:', error);
+      showNotification('Error saving section', 'error');
+      setNoteState(prev => ({ ...prev, isSaving: false }));
     }
+  };
+
+  // Handle keyboard shortcuts in editor
+  const handleTextareaKeyDown = (e: KeyboardEvent) => {
+    // Note: Most keyboard shortcuts are handled at the global level now
+    // This function is only for editor-specific shortcuts if needed
   };
 
   // Manual save
@@ -199,8 +329,8 @@ function App() {
   };
 
   // Show notification with auto-hide
-  const showNotification = (message: string) => {
-    setNotification(message);
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({message, type});
     setTimeout(() => setNotification(null), 2000);
   };
 
@@ -295,9 +425,15 @@ function App() {
 
       {/* Notification Toast */}
       {notification && (
-        <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-2 rounded-md shadow-lg flex items-center gap-2 animate-in fade-in duration-200">
-          <Check className="w-4 h-4" />
-          <span className="text-sm font-medium">{notification}</span>
+        <div className={cn(
+          "absolute top-4 right-4 text-white px-3 py-2 rounded-md shadow-lg flex items-center gap-2 animate-in fade-in duration-200",
+          notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        )}>
+          {notification.type === 'success' ? 
+            <Check className="w-4 h-4" /> : 
+            <AlertCircle className="w-4 h-4" />
+          }
+          <span className="text-sm font-medium">{notification.message}</span>
         </div>
       )}
 
@@ -308,7 +444,7 @@ function App() {
             {window.electronAPI.platform === 'darwin' ? '⌘+Shift+N' : 'Ctrl+Shift+N'} to toggle
           </div>
           <div className="text-xs text-neutral-400 dark:text-neutral-500 text-center">
-            ↵↵ quick save • {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'}+S save • Esc close
+            {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'}+S save • {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'}+Shift+↵ section • {window.electronAPI.platform === 'darwin' ? '⌘' : 'Ctrl'}+Shift+I console
           </div>
         </div>
       </div>

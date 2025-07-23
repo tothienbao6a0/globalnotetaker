@@ -3,6 +3,12 @@ import * as path from 'path';
 import Store from 'electron-store';
 import { GoogleSyncManager } from './googleSync';
 
+// Disable security warnings in development
+const isDev = process.argv.includes('--dev');
+if (isDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+}
+
 // Load environment variables from .env file
 import * as dotenv from 'dotenv';
 const envResult = dotenv.config();
@@ -32,9 +38,9 @@ class GlobalNoteTaker {
     // Create the browser window with minimal, floating design
     this.mainWindow = new BrowserWindow({
       width: 380,
-      height: 280,
+      height: 300,
       x: Math.round((width - 380) / 2),
-      y: Math.round((height - 280) / 3),
+      y: Math.round((height - 300) / 3),
       frame: true,
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 16, y: 16 },
@@ -51,13 +57,35 @@ class GlobalNoteTaker {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-
+        allowRunningInsecureContent: false,
+        experimentalFeatures: false,
+        webSecurity: true, // Always enable web security
         preload: path.join(__dirname, 'preload.js'),
       },
     });
 
-    // Load the app
-    const isDev = process.argv.includes('--dev');
+    // Load the app  
+    // Note: isDev already defined at top of file
+    
+    // Set up CSP - only for production builds
+    if (!isDev) {
+      const csp = "default-src 'self'; " +
+                  "script-src 'self' 'unsafe-inline'; " +
+                  "style-src 'self' 'unsafe-inline'; " +
+                  "img-src 'self' data: https:; " +
+                  "font-src 'self' data:; " +
+                  "connect-src 'self' https:;";
+
+      this.mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Content-Security-Policy': [csp]
+          }
+        });
+      });
+    }
+    
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:3000');
       this.mainWindow.webContents.openDevTools();
@@ -118,6 +146,14 @@ class GlobalNoteTaker {
         this.mainWindow.hide();
       }
     });
+
+    // Register Cmd+Shift+I (Ctrl+Shift+I) to toggle developer tools
+    const devToolsShortcut = process.platform === 'darwin' ? 'Cmd+Shift+I' : 'Ctrl+Shift+I';
+    globalShortcut.register(devToolsShortcut, () => {
+      if (this.mainWindow) {
+        this.mainWindow.webContents.toggleDevTools();
+      }
+    });
   }
 
   setupIpcHandlers(): void {
@@ -135,13 +171,22 @@ class GlobalNoteTaker {
       store.set('lastNote', content);
       store.set('lastSaved', new Date().toISOString());
       
-      // Auto-sync to Google Docs if enabled
-      if (this.syncManager) {
-        const syncResult = await this.syncManager.syncNote(content);
-        return { success: true, syncResult };
-      }
-      
+      // Regular save: ONLY save locally, don't sync to Google Docs
+      // Google Docs sync only happens with Cmd+Shift+S (save-note-section)
       return { success: true };
+    });
+
+    ipcMain.handle('save-note-section', async (_, content: string) => {
+      try {
+        if (this.syncManager) {
+          const success = await this.syncManager.saveAsSection(content);
+          return success;
+        }
+        return false;
+      } catch (error) {
+        console.error('Failed to save note section:', error);
+        return false;
+      }
     });
 
     ipcMain.handle('load-note', async () => {

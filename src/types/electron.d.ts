@@ -2,6 +2,7 @@ export interface ElectronAPI {
   closeWindow: () => Promise<void>;
   minimizeWindow: () => Promise<void>;
   saveNote: (content: string) => Promise<{ success: boolean; syncResult?: any }>;
+  saveNoteSection: (content: string) => Promise<boolean>;
   loadNote: () => Promise<{ content: string; lastSaved: string | null }>;
   
   // Google sync operations

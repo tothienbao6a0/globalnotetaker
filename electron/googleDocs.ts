@@ -65,7 +65,7 @@ export class GoogleDocsService {
         endIndex = lastElement.endIndex - 1; // Subtract 1 to avoid the final newline
       }
 
-      const requests = [];
+      const requests: any[] = [];
 
       // Delete existing content if any
       if (endIndex > 1) {
@@ -227,5 +227,43 @@ export class GoogleDocsService {
         ],
       },
     });
+  }
+
+  /**
+   * Add content as a new section with section break
+   */
+  async addSectionToDocument(documentId: string, content: string): Promise<void> {
+    try {
+      // Get document to find the end index
+      const doc = await this.docs.documents.get({ documentId });
+      const bodyContent = doc.data.body?.content || [];
+      
+      // Find the last element's end index
+      let endIndex = 1;
+      if (bodyContent.length > 0) {
+        const lastElement = bodyContent[bodyContent.length - 1];
+        endIndex = lastElement.endIndex || 1;
+      }
+
+      // Simply append the content with separators (no section breaks for now)
+      await this.docs.documents.batchUpdate({
+        documentId,
+        requestBody: {
+          requests: [
+            {
+              insertText: {
+                location: {
+                  index: endIndex - 1,
+                },
+                text: `\n\n${content}`,
+              },
+            },
+          ] as any,
+        },
+      });
+    } catch (error) {
+      console.error('Error adding section to document:', error);
+      throw new Error(`Failed to add section: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 } 

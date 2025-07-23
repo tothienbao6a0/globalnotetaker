@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Note operations
   saveNote: (content: string) => ipcRenderer.invoke('save-note', content),
+  saveNoteSection: (content: string) => ipcRenderer.invoke('save-note-section', content),
   loadNote: () => ipcRenderer.invoke('load-note'),
   
   // Google sync operations

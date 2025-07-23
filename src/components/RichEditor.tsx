@@ -77,7 +77,12 @@ export const RichEditor = forwardRef<RichEditorRef, RichEditorProps>(
         return editor?.getHTML() || '';
       },
       setHTML: (html: string) => {
-        editor?.commands.setContent(html);
+        if (editor) {
+          editor.commands.setContent(html);
+          // Force a content update
+          const currentHtml = editor.getHTML();
+          console.log('🔍 RichEditor setHTML called with:', html, 'current content after:', currentHtml);
+        }
       },
     }));
 

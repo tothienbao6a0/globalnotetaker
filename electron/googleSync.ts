@@ -259,4 +259,38 @@ export class GoogleSyncManager {
     }
     return true;
   }
+
+  /**
+   * Save content as a new section with section break
+   */
+  async saveAsSection(content: string): Promise<boolean> {
+    if (!this.authService.isConfigured()) {
+      console.error('Google OAuth not configured. Please set up your .env file.');
+      return false;
+    }
+
+    if (!this.docsService || !this.isAuthenticated()) {
+      console.error('Not authenticated with Google');
+      return false;
+    }
+
+    const settings = this.getSyncSettings();
+    if (!settings.isEnabled || !settings.targetDocumentId) {
+      console.error('Sync is disabled or no target document configured');
+      return false;
+    }
+
+    try {
+      // Add section break and content to the document
+      await this.docsService.addSectionToDocument(settings.targetDocumentId, content);
+      
+      // Update last sync time
+      this.setSyncSettings({ lastSync: new Date().toISOString() });
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to save section:', error);
+      return false;
+    }
+  }
 } 
